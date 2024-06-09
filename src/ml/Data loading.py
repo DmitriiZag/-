@@ -57,10 +57,41 @@ set_11 = set_11.groupby('УНОМ').agg({
 
 
 result = subset_set_5.copy()  # Start with the 10% subset of set_5
-result = pd.merge(result, set_6, on='УНОМ', how='left', suffixes=('', '_set6'))
 result = pd.merge(result, set_9, on='УНОМ', how='left', suffixes=('', '_set9'))
 result = pd.merge(result, set_11, on='УНОМ', how='left', suffixes=('', '_set11'))
 result = pd.merge(result, set_14, on='УНОМ', how='left', suffixes=('', '_set14'))
+
+result = result.drop('Тип номера дом', axis=1)
+result = result.drop('Тип номера строения/сооружения', axis=1)
+result = result.drop('Тип', axis=1)
+result = result.drop('Признак', axis=1)
+result = result.drop('Идентификатор из сторонней системы', axis=1)
+result = result.drop('Общая площадь_set14', axis=1)
+result = result.drop('Unnamed: 16', axis=1)
+result = result.drop('Адрес', axis=1)
+result = result.drop('Общая площадь нежилых помещений', axis=1)
+
+
+result['Наименование'] = result['Наименование'].astype('category')
+result['Дата создания во внешней системе'] = result['Дата создания во внешней системе'].astype('datetime64[ns]')
+result['Дата закрытия'] = result['Дата создания во внешней системе'].astype('datetime64[ns]')
+result['УНОМ'] = result['УНОМ'].astype('category')
+result['Материал'] = result['Материал'].astype('category')
+result['Назначение'] = result['Назначение'].astype('category')
+result['Класс'] = result['Класс'].astype('category')
+result['Этажность'] = result['Этажность'].astype('float')
+result['Общая площадь'] = result['Общая площадь'].str.replace(',', '.')
+result['Общая площадь'] = result['Общая площадь'].astype(float)
+result['Серии проектов'] = result['Серии проектов'].astype('category')
+result[' Материалы стен'] = result[' Материалы стен'].astype('category')
+result['Признак аварийности здания'] = result['Признак аварийности здания'].astype('category')
+result['Очередность уборки кровли'] = result['Очередность уборки кровли'].astype('category')
+result['Материалы кровли по БТИ'] = result['Материалы кровли по БТИ'].astype('category')
+result['Типы жилищного фонда'] = result['Типы жилищного фонда'].astype('category')
+result['Статусы МКД'] = result['Статусы МКД'].astype('category')
+
+
+
 
 
 
