@@ -26,7 +26,7 @@ set_14 = pd.read_pickle('/Users/dmitrii/Desktop/Хакатон/Datasets/Set 14.p
 
 # Step 1: Shuffle set_5 and select 10%
 set_5_shuffled = set_5.sample(frac=1, random_state=1)  # Shuffle
-subset_set_5 = set_5_shuffled.head(int(0.1 * len(set_5)))  # Take 10%
+subset_set_5 = set_5_shuffled.head(int(1 * len(set_5)))  # Take 10%
 
 # Convert columns to numeric, setting errors='coerce' will convert non-numeric values to NaN
 columns_to_convert = [
