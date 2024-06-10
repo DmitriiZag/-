@@ -5,102 +5,98 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.preprocessing import LabelEncoder
 
-# Load datasets
-set_5 = pd.read_pickle('/Users/dmitrii/Desktop/Хакатон/Datasets/Set 5.pkl')
-set_9 = pd.read_pickle('/Users/dmitrii/Desktop/Хакатон/Datasets/Set 9.pkl')
-set_11 = pd.read_pickle('/Users/dmitrii/Desktop/Хакатон/Datasets/Set 11.pkl')
-set_14 = pd.read_pickle('/Users/dmitrii/Desktop/Хакатон/Datasets/Set 14.pkl')
+def load_data():
+    """Load datasets from specified paths."""
+    data_paths = {
+        'set_5': '/Users/dmitrii/Desktop/Хакатон/Datasets/Set 5.pkl',
+        'set_9': '/Users/dmitrii/Desktop/Хакатон/Datasets/Set 9.pkl',
+        'set_11': '/Users/dmitrii/Desktop/Хакатон/Datasets/Set 11.pkl',
+        'set_14': '/Users/dmitrii/Desktop/Хакатон/Datasets/Set 14.pkl'
+    }
+    return {name: pd.read_pickle(path) for name, path in data_paths.items()}
 
-# Shuffle set_5 and select 100%
-set_5_shuffled = set_5.sample(frac=1, random_state=1)
-subset_set_5 = set_5_shuffled
+def preprocess_data(data):
+    """Convert specific columns to numeric and handle NaNs."""
+    columns_to_convert = [
+        'Объём поданого теплоносителя в систему ЦО',
+        'Объём обратного теплоносителя из системы ЦО',
+        'Разница между подачей и обраткой(Подмес)',
+        'Разница между подачей и обраткой(Утечка)',
+        'Температура подачи',
+        'Температура обратки',
+        'Наработка часов счётчика',
+        'Расход тепловой энергии '
+    ]
+    for column in columns_to_convert:
+        data['set_11'][column] = pd.to_numeric(data['set_11'][column], errors='coerce')
+    data['set_11'] = data['set_11'].groupby('УНОМ').agg({col: 'mean' for col in columns_to_convert}).reset_index()
 
-# Convert specified columns to numeric, setting errors='coerce'
-columns_to_convert = [
-    'Объём поданого теплоносителя в систему ЦО',
-    'Объём обратного теплоносителя из системы ЦО',
-    'Разница между подачей и обраткой(Подмес)',
-    'Разница между подачей и обраткой(Утечка)',
-    'Температура подачи',
-    'Температура обратки',
-    'Наработка часов счётчика',
-    'Расход тепловой энергии '
-]
-for column in columns_to_convert:
-    set_11[column] = pd.to_numeric(set_11[column], errors='coerce')
+def merge_datasets(data):
+    """Merge datasets into a single DataFrame after preprocessing."""
+    result = data['set_5'].copy()
+    for key in ['set_9', 'set_11', 'set_14']:
+        result = pd.merge(result, data[key], on='УНОМ', how='left')
+    return result
 
-# Perform aggregation
-set_11 = set_11.groupby('УНОМ').agg({
-    'Объём поданого теплоносителя в систему ЦО': 'mean',
-    'Объём обратного теплоносителя из системы ЦО': 'mean',
-    'Разница между подачей и обраткой(Подмес)': 'mean',
-    'Разница между подачей и обраткой(Утечка)': 'mean',
-    'Температура подачи': 'mean',
-    'Температура обратки': 'mean',
-    'Наработка часов счётчика': 'mean',
-    'Расход тепловой энергии ': 'mean'
-}).reset_index()
+def clean_data(df):
+    """Drop irrelevant columns and fill NaN values."""
+    drop_columns = [
+        'Тип номера дом', 'Тип номера строения/сооружения', 'Тип', 'Признак',
+        'Идентификатор из сторонней системы', 'Общая площадь_x', 'Unnamed: 16',
+        'Адрес', 'Общая площадь нежилых помещений', 'Дата создания во внешней системе',
+        'Дата закрытия', 'Очередность уборки кровли', 'Типы жилищного фонда', 'Количество грузопассажирских лифтов'
+    ]
+    df.drop(columns=drop_columns, inplace=True)
+    for column in df.select_dtypes(include=['float64', 'int64']).columns:
+        df[column].fillna(df[column].mean(), inplace=True)
+    for column in df.select_dtypes(exclude=['float64', 'int64', 'int32', 'float32']).columns:
+        df[column] = df.groupby('УНОМ')[column].transform(lambda x: x.ffill().bfill())
+        if df[column].isnull().any():
+            df[column].fillna(df[column].mode()[0] if not df[column].mode().empty else "Unknown", inplace=True)
 
-# Merge datasets
-result = subset_set_5.copy()
-result = pd.merge(result, set_9, on='УНОМ', how='left')
-result = pd.merge(result, set_11, on='УНОМ', how='left')
-result = pd.merge(result, set_14, on='УНОМ', how='left')
+def encode_features(df):
+    """Encode categorical features and target variable."""
+    le_target = LabelEncoder()
+    df['Наименование'] = le_target.fit_transform(df['Наименование'])
+    for column in df.select_dtypes(include=['category', 'object']).columns:
+        df[column] = LabelEncoder().fit_transform(df[column])
+    return le_target
 
-print(result.columns)
-# Drop irrelevant columns
-drop_columns = [
-    'Тип номера дом', 'Тип номера строения/сооружения', 'Тип', 'Признак', 'Идентификатор из сторонней системы',
-    'Общая площадь_x', 'Unnamed: 16', 'Адрес', 'Общая площадь нежилых помещений',
-    'Дата создания во внешней системе', 'Дата закрытия', 'Очередность уборки кровли', 'Типы жилищного фонда',
-    'Количество грузопассажирских лифтов'
-]
-result.drop(columns=drop_columns, inplace=True)
+def train_model(X, y):
+    """Train a RandomForestClassifier."""
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = RandomForestClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    return model, X_test, y_test
 
+def evaluate_model(model, X_test, y_test, le_target):
+    """Evaluate the model and return the test set with predictions."""
+    test_x = X_test.drop_duplicates(subset=['УНОМ']).copy()
+    test_y = y_test.loc[test_x.index]
+    y_pred = model.predict(test_x)
+    test_x['Predictions'] = y_pred
+    test_x['Predicted_Labels'] = le_target.inverse_transform(y_pred)
+    print("Accuracy:", accuracy_score(test_y, y_pred))
+    print("Classification Report:\n", classification_report(test_y, y_pred))
+    return test_x
 
+def save_predictions(df):
+    """Save DataFrame with predictions to CSV."""
+    file_path = '/Users/dmitrii/Desktop/Хакатон/Datasets/predictions.csv'
+    df.to_csv(file_path, index=False)
+    print(f"Predictions saved to {file_path}")
 
-# Fill NaN for numerical and propagate for categorical
-numerical_columns = result.select_dtypes(include=['float64', 'int64']).columns
-categorical_columns = result.select_dtypes(exclude=['float64', 'int64', 'int32', 'float32']).columns
+def main():
+    data = load_data()
+    preprocess_data(data)
+    result = merge_datasets(data)
+    clean_data(result)
+    le_target = encode_features(result)
+    X = result.drop('Наименование', axis=1)
+    y = result['Наименование']
+    model, X_test, y_test = train_model(X, y)
+    test_x = evaluate_model(model, X_test, y_test, le_target)
+    save_predictions(test_x)
 
-for column in numerical_columns:
-    mean_value = result[column].mean()
-    result[column].fillna(mean_value, inplace=True)
-
-for column in categorical_columns:
-    result[column] = result.groupby('УНОМ')[column].transform(lambda x: x.ffill().bfill())
-    if result[column].isnull().any():
-        most_common = result[column].mode()[0] if not result[column].mode().empty else "Unknown"
-        result[column].fillna(most_common, inplace=True)
-
-# Separate label encoder for the target variable
-le_target = LabelEncoder()
-result['Наименование'] = le_target.fit_transform(result['Наименование'])
-
-# Separate label encoder for categorical features
-le_features = LabelEncoder()
-for column in categorical_columns:
-    result[column] = le_features.fit_transform(result[column])
-
-# Prepare data for model
-X = result.drop('Наименование', axis=1)
-y = result['Наименование']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Model training
-rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
-rf_classifier.fit(X_train, y_train)
-
-# Prediction and evaluation
-test_x = X_test.drop_duplicates(subset=['УНОМ']).copy()
-test_y = y_test.loc[test_x.index]
-y_pred = rf_classifier.predict(test_x)
-
-test_x['Predictions'] = y_pred
-test_x['Predicted_Labels'] = le_target.inverse_transform(test_x['Predictions'])
-
-accuracy = accuracy_score(test_y, y_pred)
-print("Accuracy:", accuracy)
-print("Classification Report:\n", classification_report(test_y, y_pred))
-
-print(test_x)
+if __name__ == "__main__":
+    main()
